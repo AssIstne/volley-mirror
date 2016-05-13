@@ -7,3 +7,6 @@ target
 *.iml
 .idea
 local.properties
+gradle/wrapper
+gradlew
+gradlew.bat
