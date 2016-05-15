@@ -17,19 +17,24 @@
 package com.android.volley;
 
 /**
+ * 最终传给回调接口的类
  * Encapsulates a parsed response for delivery.
  *
  * @param <T> Parsed type of this response
  */
 public class Response<T> {
 
-    /** Callback interface for delivering parsed responses. */
+    /**
+     * 默认的接口, 不一定要使用
+     * Callback interface for delivering parsed responses. */
     public interface Listener<T> {
         /** Called when a response is received. */
         public void onResponse(T response);
     }
 
-    /** Callback interface for delivering error responses. */
+    /**
+     * 默认会在{@link Request#deliverResponse(Object)}被调用, 父类{@link Request}有默认实现, 也可以重写
+     * Callback interface for delivering error responses. */
     public interface ErrorListener {
         /**
          * Callback method that an error has been occurred with the
@@ -54,13 +59,17 @@ public class Response<T> {
     /** Parsed response, or null in the case of error. */
     public final T result;
 
-    /** Cache metadata for this response, or null in the case of error. */
+    /**
+     * 不为null, 才会在{@link NetworkDispatcher#run()}中写进缓存中
+     * Cache metadata for this response, or null in the case of error. */
     public final Cache.Entry cacheEntry;
 
     /** Detailed error information if <code>errorCode != OK</code>. */
     public final VolleyError error;
 
-    /** True if this response was a soft-expired one and a second one MAY be coming. */
+    /**
+     * 在{@link CacheDispatcher#run()}中, 当缓存需要刷新时会被赋值为true, 因为会发起请求, 所以后续应该会有另一个Respond到来
+     * True if this response was a soft-expired one and a second one MAY be coming. */
     public boolean intermediate = false;
 
     /**

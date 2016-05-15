@@ -17,19 +17,28 @@
 package com.android.volley;
 
 /**
+ * 默认的重试策略, 会在请求返回服务器内部错误5xx并且当前请求{@link Request}启动了重试策略的时候使用
  * Default retry policy for requests.
  */
 public class DefaultRetryPolicy implements RetryPolicy {
-    /** The current timeout in milliseconds. */
+    /**
+     * 超时毫秒数, 默认是2.5s
+     * The current timeout in milliseconds. */
     private int mCurrentTimeoutMs;
 
-    /** The current retry count. */
+    /**
+     * 记录当前重试次数
+     * The current retry count. */
     private int mCurrentRetryCount;
 
-    /** The maximum number of attempts. */
+    /**
+     * 最大重试次数, 默认是1次
+     * The maximum number of attempts. */
     private final int mMaxNumRetries;
 
-    /** The backoff multiplier for the policy. */
+    /**
+     * 下一次重试的超时时间是当前的几倍? 默认是1
+     * The backoff multiplier for the policy. */
     private final float mBackoffMultiplier;
 
     /** The default socket timeout in milliseconds */
@@ -84,6 +93,12 @@ public class DefaultRetryPolicy implements RetryPolicy {
     }
 
     /**
+     * 延迟超时时间, 会影响{@link Request#getTimeoutMs()}, 进而影响在实际发起请求时的超时时间
+     * 如果超过最大重试次数就抛出异常
+     * todo 1. 谁处理这个异常? 2. 传进来的异常时谁传进来的?
+     * 1. 抛出的异常会在{@link com.android.volley.toolbox.BasicNetwork#attemptRetryOnException(String, Request, VolleyError)}中处理
+     * 2. 传进来的异常来自{@link com.android.volley.toolbox.BasicNetwork#attemptRetryOnException(String, Request, VolleyError)},
+     * 是在{@link com.android.volley.toolbox.BasicNetwork#performRequest(Request)}中根据网络请求的异常来创建的
      * Prepares for the next retry by applying a backoff to the timeout.
      * @param error The error code of the last attempt.
      */

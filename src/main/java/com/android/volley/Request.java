@@ -45,6 +45,7 @@ public abstract class Request<T> implements Comparable<Request<T>> {
      * Supported request methods.
      */
     public interface Method {
+        /** 弃用了, 根据{@link Request#getPostBody()}来确定是GET还是POST*/
         int DEPRECATED_GET_OR_POST = -1;
         int GET = 0;
         int POST = 1;
@@ -80,7 +81,9 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     /** The request queue this request is associated with. */
     private RequestQueue mRequestQueue;
 
-    /** Whether or not responses to this request should be cached. */
+    /**
+     * 默认是允许缓存的
+     * Whether or not responses to this request should be cached. */
     private boolean mShouldCache = true;
 
     /** Whether or not this request has been canceled. */
@@ -89,10 +92,15 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     /** Whether or not a response has been delivered for this request yet. */
     private boolean mResponseDelivered = false;
 
-    /** Whether the request should be retried in the event of an HTTP 5xx (server) error. */
+    /**
+     * 服务器内部错误的时候是否重试请求, 会在{@link com.android.volley.toolbox.BasicNetwork#performRequest(Request)} 中返回码为5xx的时候
+     * 用来判断是否重试
+     * Whether the request should be retried in the event of an HTTP 5xx (server) error. */
     private boolean mShouldRetryServerErrors = false;
 
-    /** The retry policy for this request. */
+    /**
+     * 重试策略, 默认是{@link DefaultRetryPolicy}
+     * The retry policy for this request. */
     private RetryPolicy mRetryPolicy;
 
     /**
@@ -119,6 +127,7 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     }
 
     /**
+     * 成功返回的接口应该在{@link #deliverResponse(Object)}中让子类处理
      * Creates a new request with the given method (one of the values from {@link Method}),
      * URL, and error listener.  Note that the normal response listener is not provided here as
      * delivery of responses is provided by subclasses, who have a better idea of how to deliver
@@ -209,6 +218,9 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     }
 
     /**
+     * 结束自己
+     * 1. 通知{@link RequestQueue}结束自己
+     * 2. 做日志
      * Notifies the request queue that this request has finished (successfully or with error).
      *
      * <p>Also dumps all events from this request's event log; for debugging.</p>
@@ -277,6 +289,7 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     }
 
     /**
+     * 相同的cacheKey会被缓存机制{@link Cache}和{@link RequestQueue#mWaitingRequests}看作同一个请求
      * Returns the cache key for this request.  By default, this is the URL.
      */
     public String getCacheKey() {
@@ -302,6 +315,9 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     }
 
     /**
+     * 取消当前请求, 影响一下两个环节
+     * 1. 在{@link CacheDispatcher#run()} 和 {@link NetworkDispatcher#run()}中从队列中取出请求后会判断是否被取消
+     * 2. 在{@link ExecutorDelivery.ResponseDeliveryRunnable#run()}中回调前会判断
      * Mark this request as canceled.  No callback will be delivered.
      */
     public void cancel() {
@@ -369,6 +385,7 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     }
 
     /**
+     * 在{@link com.android.volley.toolbox.HurlStack}里面当请求方法是{@link Request.Method#DEPRECATED_GET_OR_POST}时仍然使用该方法, 已经弃用了
      * Returns the raw POST body to be sent.
      *
      * @throws AuthFailureError In the event of auth failure
@@ -381,6 +398,8 @@ public abstract class Request<T> implements Comparable<Request<T>> {
         // here instead of simply calling the getBody() function because this function must
         // call getPostParams() and getPostParamsEncoding() since legacy clients would have
         // overridden these two member functions for POST requests.
+        /** {@link #getPostParams()} 默认是直接调用{@link #getParams()} 因此有需要重写也是重写{@link #getParams()},
+         * {@link #getPostParamsEncoding()}同理 */
         Map<String, String> postParams = getPostParams();
         if (postParams != null && postParams.size() > 0) {
             return encodeParameters(postParams, getPostParamsEncoding());
@@ -542,6 +561,7 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     }
 
     /**
+     * 会在{@link CacheDispatcher#run()} 和 {@link NetworkDispatcher#run()}中被调用
      * Subclasses must implement this to parse the raw network response
      * and return an appropriate response type. This method will be
      * called from a worker thread.  The response will not be delivered
@@ -552,6 +572,7 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     abstract protected Response<T> parseNetworkResponse(NetworkResponse response);
 
     /**
+     * 会在{@link NetworkDispatcher#run()}中抛出{@link VolleyError}异常时被调用, 可以在这里详细分类错误类型
      * Subclasses can override this method to parse 'networkError' and return a more specific error.
      *
      * <p>The default implementation just returns the passed 'networkError'.</p>
@@ -564,6 +585,8 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     }
 
     /**
+     * 会在{@link ExecutorDelivery.ResponseDeliveryRunnable#run()}中被调用分发响应, 分发响应应该由具体的子类负责,
+     * 在这里可以自定义多个响应接口, 传入参数是{@link #parseNetworkResponse(NetworkResponse)}的返回值
      * Subclasses must implement this to perform delivery of the parsed
      * response to their listeners.  The given response is guaranteed to
      * be non-null; responses that fail to parse are not delivered.
@@ -573,6 +596,8 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     abstract protected void deliverResponse(T response);
 
     /**
+     * 传入的参数是{@link #parseNetworkError(VolleyError)}的返回值
+     * 默认就是调用错误返回接口
      * Delivers error message to the ErrorListener that the Request was
      * initialized with.
      *
@@ -585,6 +610,9 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     }
 
     /**
+     * 比较器的接口, 用来排序的, 返回负数表示当前对象相比比较对象的"值"小, 排在前面
+     * 1. 比较优先级{@link Priority}
+     * 2. 优先级相同比较在队列{@link RequestQueue}中的序号
      * Our comparator sorts from high to low priority, and secondarily by
      * sequence number to provide FIFO ordering.
      */

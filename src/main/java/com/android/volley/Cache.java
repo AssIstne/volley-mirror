@@ -38,6 +38,7 @@ public interface Cache {
     public void put(String key, Entry entry);
 
     /**
+     * 会在{@link CacheDispatcher#run()}中, 循环开始前调用
      * Performs any potentially long-running actions needed to initialize the cache;
      * will be called from a worker thread.
      */
@@ -77,7 +78,10 @@ public interface Cache {
         /** The last modified date for the requested object. */
         public long lastModified;
 
-        /** TTL for this record. */
+        /**
+         * 这两个TTL是否不同取决于{@link com.android.volley.toolbox.HttpHeaderParser#parseCacheHeaders(NetworkResponse)},
+         * 响应的头信息是否包含 Cache-Control, 如果不包含则必一样
+         * TTL for this record. */
         public long ttl;
 
         /** Soft TTL for this record. */

@@ -21,6 +21,7 @@ package com.android.volley;
  */
 public interface Network {
     /**
+     * 会在{@link NetworkDispatcher#run()}里面被调用, 负责处理请求
      * Performs the specified request.
      * @param request Request to process
      * @return A {@link NetworkResponse} with data and caching metadata; will never be null

@@ -17,12 +17,14 @@
 package com.android.volley.toolbox;
 
 import android.os.SystemClock;
+import android.util.Log;
 
 import com.android.volley.AuthFailureError;
 import com.android.volley.Cache;
 import com.android.volley.Cache.Entry;
 import com.android.volley.ClientError;
 import com.android.volley.Network;
+import com.android.volley.NetworkDispatcher;
 import com.android.volley.NetworkError;
 import com.android.volley.NetworkResponse;
 import com.android.volley.NoConnectionError;
@@ -62,7 +64,7 @@ public class BasicNetwork implements Network {
     private static int DEFAULT_POOL_SIZE = 4096;
 
     protected final HttpStack mHttpStack;
-
+    // TODO: 16/5/15 什么用途?
     protected final ByteArrayPool mPool;
 
     /**
@@ -83,9 +85,14 @@ public class BasicNetwork implements Network {
         mPool = pool;
     }
 
+    /** 会在{@link com.android.volley.NetworkDispatcher#run()}里面被调用, 负责处理请求
+     * 会把原生的{@link HttpResponse}转化成{@link NetworkResponse},
+     * 之后又会在{@link Request#parseNetworkResponse(NetworkResponse)}中转化为{@link com.android.volley.Response}*/
     @Override
     public NetworkResponse performRequest(Request<?> request) throws VolleyError {
+        // 用来计算请求消耗的时间的
         long requestStart = SystemClock.elapsedRealtime();
+        /** 该方法是在worker thread中被调用, 因此无限循环不会阻塞UI */
         while (true) {
             HttpResponse httpResponse = null;
             byte[] responseContents = null;
@@ -93,16 +100,26 @@ public class BasicNetwork implements Network {
             try {
                 // Gather headers.
                 Map<String, String> headers = new HashMap<String, String>();
+                // 缓存的信息
                 addCacheHeaders(headers, request.getCacheEntry());
+                /** 通过{@link HttpStack}发起网络请求, 这里是实际发起请求的地方, 耗时操作 */
                 httpResponse = mHttpStack.performRequest(request, headers);
                 StatusLine statusLine = httpResponse.getStatusLine();
                 int statusCode = statusLine.getStatusCode();
-
+                // 转换响应的头部信息
                 responseHeaders = convertHeaders(httpResponse.getAllHeaders());
                 // Handle cache validation.
+                /**
+                 * {@link HttpStatus#SC_NOT_MODIFIED} = 304
+                 * 如果客户端发送的是一个条件验证(Conditional Validation)请求,
+                 * 则web服务器可能会返回HTTP/304响应,这就表明了客户端中所请求资源的缓存仍然是有效的
+                 * 条件验证请求: 客户端提供给服务器一个If-Modified-Since请求头,其值为服务器上次返回的Last-Modified响应头中的日期值,
+                 * 还需要提供一个If-None-Match请求头,值为服务器上次返回的ETag响应头的值
+                 * */
                 if (statusCode == HttpStatus.SC_NOT_MODIFIED) {
-
+                    /** 此时服务器返回的body应该是没有数据的 */
                     Entry entry = request.getCacheEntry();
+                    // 正常情况下, 返回304的时候, 缓存不应该为null
                     if (entry == null) {
                         return new NetworkResponse(HttpStatus.SC_NOT_MODIFIED, null,
                                 responseHeaders, true,
@@ -113,6 +130,7 @@ public class BasicNetwork implements Network {
                     // have to use the header fields from the cache entry plus
                     // the new ones from the response.
                     // http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.3.5
+                    // 更新缓存的头部信息
                     entry.responseHeaders.putAll(responseHeaders);
                     return new NetworkResponse(HttpStatus.SC_NOT_MODIFIED, entry.data,
                             entry.responseHeaders, true,
@@ -121,6 +139,7 @@ public class BasicNetwork implements Network {
 
                 // Some responses such as 204s do not have content.  We must check.
                 if (httpResponse.getEntity() != null) {
+                  // TODO: 16/5/15 为什么要转成字节码?
                   responseContents = entityToBytes(httpResponse.getEntity());
                 } else {
                   // Add 0 byte response as a way of honestly representing a
@@ -130,31 +149,51 @@ public class BasicNetwork implements Network {
 
                 // if the request is slow, log it.
                 long requestLifetime = SystemClock.elapsedRealtime() - requestStart;
+                // 如果请求耗时超过3s, 记录下来
                 logSlowRequests(requestLifetime, request, responseContents, statusLine);
-
+                /** 返回码小于200, 大于299抛出异常
+                 * 1xx是临时返回, 仅包含信息(Informational)
+                 * 3xx是重定向(Redirection), 提示需要进一步处理, 304Not Modified特殊处理了
+                 * 4xx是客户端错误(Client Error)
+                 * 5xx是服务器错误(Server Error)*/
                 if (statusCode < 200 || statusCode > 299) {
                     throw new IOException();
                 }
                 return new NetworkResponse(statusCode, responseContents, responseHeaders, false,
                         SystemClock.elapsedRealtime() - requestStart);
             } catch (SocketTimeoutException e) {
+                /** 超时时尝试重试, 因为这里是无限循环, 所以会再一次发起请求 */
                 attemptRetryOnException("socket", request, new TimeoutError());
             } catch (ConnectTimeoutException e) {
+                // 超时时尝试重试
                 attemptRetryOnException("connection", request, new TimeoutError());
             } catch (MalformedURLException e) {
+                /**
+                 * URL解析失败的时候抛出
+                 * 运行时异常, 会报错退出循环, 但不会退出应用程序, 因为在{@link NetworkDispatcher#run()}里面会捕抓这个异常 */
                 throw new RuntimeException("Bad URL " + request.getUrl(), e);
             } catch (IOException e) {
+                // TODO: 16/5/15 什么情况下回抛出这个异常
+                /**
+                 * 1. {@link #entityToBytes(HttpEntity)}
+                 * 2. 返回码小于200, 大于299
+                 * 3. {@link HttpStack#performRequest(Request, Map)}当{@link com.android.volley.toolbox.HurlStack.UrlRewriter#rewriteUrl(String)}
+                 * 返回的的url为空时会抛出 */
                 int statusCode;
                 if (httpResponse != null) {
                     statusCode = httpResponse.getStatusLine().getStatusCode();
                 } else {
+                    /** 如果为空, 证明在响应返回前就报错了, 直接中止循环, 可以当做是网络原因 */
                     throw new NoConnectionError(e);
                 }
                 VolleyLog.e("Unexpected response code %d for %s", statusCode, request.getUrl());
                 NetworkResponse networkResponse;
+                /**
+                 * 不为空证明这个异常不是{@link #entityToBytes(HttpEntity)}抛出的 */
                 if (responseContents != null) {
                     networkResponse = new NetworkResponse(statusCode, responseContents,
                             responseHeaders, false, SystemClock.elapsedRealtime() - requestStart);
+                    /** 401, 403就重试, 4xx的其他错误就不重试, 5xx的根据{@link Request#mShouldRetryServerErrors}决定 */
                     if (statusCode == HttpStatus.SC_UNAUTHORIZED ||
                             statusCode == HttpStatus.SC_FORBIDDEN) {
                         attemptRetryOnException("auth",
@@ -170,10 +209,13 @@ public class BasicNetwork implements Network {
                             throw new ServerError(networkResponse);
                         }
                     } else {
+                        /**
+                         * 前面已经处理了304, 其他3xx不管 */
                         // 3xx? No reason to retry.
                         throw new ServerError(networkResponse);
                     }
                 } else {
+                    /** {@link #entityToBytes(HttpEntity)}抛出异常, 重试 */
                     attemptRetryOnException("network", request, new NetworkError());
                 }
             }
@@ -204,21 +246,28 @@ public class BasicNetwork implements Network {
         int oldTimeout = request.getTimeoutMs();
 
         try {
+            /** 在默认的{@link com.android.volley.DefaultRetryPolicy}中, 会将超时时间推迟*/
             retryPolicy.retry(exception);
         } catch (VolleyError e) {
+            /** 重试次数超出最大次数的时候就运行到这里, 这里异常就是传进来的异常 */
             request.addMarker(
                     String.format("%s-timeout-giveup [timeout=%s]", logPrefix, oldTimeout));
+            /** 这里抛出异常会令到循环中止, 该异常会在{@link NetworkDispatcher#run()}中被捕抓 */
             throw e;
         }
         request.addMarker(String.format("%s-retry [timeout=%s]", logPrefix, oldTimeout));
     }
 
+    /**
+     * 将缓存的一些信息放入请求头部, 如果缓存存在, 并且信息完整就会将当前请求变为条件验证请求(Conditional Validation), 有可能返回304
+     * 在进行条件请求时,客户端会提供给服务器一个If-Modified-Since请求头, 其值为服务器上次返回的Last-Modified响应头中的日期值,
+     * 还会提供一个If-None-Match请求头, 值为服务器上次返回的ETag响应头的值
+     * */
     private void addCacheHeaders(Map<String, String> headers, Cache.Entry entry) {
         // If there's no cache entry, we're done.
         if (entry == null) {
             return;
         }
-
         if (entry.etag != null) {
             headers.put("If-None-Match", entry.etag);
         }

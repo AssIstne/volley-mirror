@@ -134,6 +134,7 @@ public class HttpHeaderParser {
     }
 
     /**
+     * 从响应头信息里的Content-Type中提取出编码类型
      * Retrieve a charset from headers
      *
      * @param headers An {@link java.util.Map} of headers
@@ -159,6 +160,7 @@ public class HttpHeaderParser {
     }
 
     /**
+     * UTF-8兼容ISO-8859-1
      * Returns the charset specified in the Content-Type of this header,
      * or the HTTP default (ISO-8859-1) if none can be found.
      */

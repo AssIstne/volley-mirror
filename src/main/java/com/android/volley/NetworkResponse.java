@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.Map;
 
 /**
+ * 原生的{@link org.apache.http.HttpResponse}和{@link Response}的中间层
  * Data and headers returned from {@link Network#performRequest(Request)}.
  */
 public class NetworkResponse {
@@ -55,19 +56,29 @@ public class NetworkResponse {
         this(HttpStatus.SC_OK, data, headers, false, 0);
     }
 
-    /** The HTTP status code. */
+    /**
+     * 返回码, 默认是200
+     * The HTTP status code. */
     public final int statusCode;
 
-    /** Raw data from this response. */
+    /**
+     * 响应主体数据, 采用byte[]是应为有可能是图片
+     * Raw data from this response. */
     public final byte[] data;
 
-    /** Response headers. */
+    /**
+     * 响应的头部信息
+     * Response headers. */
     public final Map<String, String> headers;
 
-    /** True if the server returned a 304 (Not Modified). */
+    /**
+     * 服务器返回如果是304就为true, 在{@link com.android.volley.toolbox.BasicNetwork#performRequest(Request)}中人工判断传进来
+     * True if the server returned a 304 (Not Modified). */
     public final boolean notModified;
 
-    /** Network roundtrip time in milliseconds. */
+    /**
+     * 本次请求消耗的时间
+     * Network roundtrip time in milliseconds. */
     public final long networkTimeMs;
 }
 
