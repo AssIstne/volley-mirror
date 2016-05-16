@@ -16,9 +16,11 @@
 
 package com.android.volley.toolbox;
 
+import android.content.Context;
 import android.os.SystemClock;
 
 import com.android.volley.Cache;
+import com.android.volley.CacheDispatcher;
 import com.android.volley.VolleyLog;
 
 import java.io.BufferedInputStream;
@@ -38,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
+ * 默认的缓存策略, 使用文件缓存, 保存在 app目录/缓存目录/volley下
  * Cache implementation that caches files directly onto the hard disk in the specified
  * directory. The default disk usage size is 5MB, but is configurable.
  */
@@ -56,7 +59,9 @@ public class DiskBasedCache implements Cache {
     /** The maximum size of the cache in bytes. */
     private final int mMaxCacheSizeInBytes;
 
-    /** Default maximum disk usage in bytes. */
+    /**
+     * 默认缓存总大小是5MB
+     * Default maximum disk usage in bytes. */
     private static final int DEFAULT_DISK_USAGE_BYTES = 5 * 1024 * 1024;
 
     /** High water mark percentage for the cache */
@@ -66,6 +71,7 @@ public class DiskBasedCache implements Cache {
     private static final int CACHE_MAGIC = 0x20150306;
 
     /**
+     * 可以选择目录, 和缓存大小
      * Constructs an instance of the DiskBasedCache at the specified directory.
      * @param rootDirectory The root directory of the cache.
      * @param maxCacheSizeInBytes The maximum size of the cache in bytes.
@@ -76,6 +82,7 @@ public class DiskBasedCache implements Cache {
     }
 
     /**
+     * 默认缓存大小是5MB, 默认的目录是在{@link Volley#newRequestQueue(Context, HttpStack)}中设定的缓存目录下的volley文件夹
      * Constructs an instance of the DiskBasedCache at the specified directory using
      * the default maximum cache size of 5MB.
      * @param rootDirectory The root directory of the cache.
@@ -85,6 +92,7 @@ public class DiskBasedCache implements Cache {
     }
 
     /**
+     * 清理缓存, 实际上就是清理volley文件夹
      * Clears the cache. Deletes all cached files from disk.
      */
     @Override
@@ -134,18 +142,23 @@ public class DiskBasedCache implements Cache {
     }
 
     /**
+     * 初始化缓存, 会在{@link CacheDispatcher#run()}中循环开始前调用
      * Initializes the DiskBasedCache by scanning for all files currently in the
      * specified root directory. Creates the root directory if necessary.
      */
     @Override
     public synchronized void initialize() {
+        // 检查下缓存目录创建了没
+        /**
+         * 如果这里创建失败, 后面所有的缓存操作都会抛出异常了 */
         if (!mRootDirectory.exists()) {
             if (!mRootDirectory.mkdirs()) {
                 VolleyLog.e("Unable to create cache dir %s", mRootDirectory.getAbsolutePath());
             }
             return;
         }
-
+        /**
+         * 加载缓存, 放到{@link #mEntries}, 记录缓存文件的大小 */
         File[] files = mRootDirectory.listFiles();
         if (files == null) {
             return;
@@ -333,6 +346,7 @@ public class DiskBasedCache implements Cache {
     }
 
     /**
+     * {@link com.android.volley.Cache.Entry}的转换类, 可以直接存入文件中
      * Handles holding onto the cache headers for an entry.
      */
     // Visible for testing.

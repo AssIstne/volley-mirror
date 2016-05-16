@@ -16,6 +16,9 @@
 
 package com.android.volley.toolbox;
 
+import android.content.Context;
+import android.util.Log;
+
 import com.android.volley.AuthFailureError;
 import com.android.volley.Request;
 import com.android.volley.Request.Method;
@@ -36,6 +39,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLConnection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,9 +69,18 @@ public class HurlStack implements HttpStack {
     }
 
     private final UrlRewriter mUrlRewriter;
-    // TODO: 16/5/15 SSL相关, 具体作用是什么?
+    /**
+     * 默认为空, 是用来处理不信任证书的, 例如系统不能识别的证书, 自己发布的证书等,
+     * 普通的https是通过{@link HttpsURLConnection}处理的, 因此Volley默认就支持https
+     * 看看http://developer.android.com/intl/zh-cn/reference/java/net/HttpURLConnection.html#Secure Communication with HTTPS
+     * 和http://developer.android.com/intl/zh-cn/reference/javax/net/ssl/HttpsURLConnection.html
+     * */
     private final SSLSocketFactory mSslSocketFactory;
 
+    /**
+     * 在{@link Volley#newRequestQueue(Context, HttpStack)}中默认使用的构造方法
+     * 可见{@link #mSslSocketFactory}默认为空
+     * */
     public HurlStack() {
         this(null);
     }
@@ -181,6 +194,8 @@ public class HurlStack implements HttpStack {
      * Create an {@link HttpURLConnection} for the specified {@code url}.
      */
     protected HttpURLConnection createConnection(URL url) throws IOException {
+        /**
+         * 如果是https这里会返回一个{@link HttpsURLConnection}, 因此可以访问经过CA认证的https地址 */
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
         // Workaround for the M release HttpURLConnection not observing the
@@ -211,7 +226,10 @@ public class HurlStack implements HttpStack {
         connection.setDoInput(true);
 
         // use caller-provided custom SslSocketFactory, if any, for HTTPS
-        /** 这里对https做了处理, 因此可以访问https的url */
+        /**
+         * 如果{@link #mSslSocketFactory}不为null, 在这里会对https做了处理, 因此可以访问https的url
+         * 但是默认情况下为null
+         * */
         if ("https".equals(url.getProtocol()) && mSslSocketFactory != null) {
             ((HttpsURLConnection)connection).setSSLSocketFactory(mSslSocketFactory);
         }
@@ -278,6 +296,8 @@ public class HurlStack implements HttpStack {
 
     private static void addBodyIfExists(HttpURLConnection connection, Request<?> request)
             throws IOException, AuthFailureError {
+        /**
+         * 直接取{@link Request#getBody()}的数据用来传给服务器 */
         byte[] body = request.getBody();
         if (body != null) {
             /** 允许发送数据 */

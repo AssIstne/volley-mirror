@@ -25,6 +25,7 @@ import android.text.TextUtils;
 import com.android.volley.VolleyLog.MarkerLog;
 
 import java.io.UnsupportedEncodingException;
+import java.net.HttpURLConnection;
 import java.net.URLEncoder;
 import java.util.Collections;
 import java.util.Map;
@@ -332,6 +333,7 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     }
 
     /**
+     * 重写该方法来决定Request的头部信息, 会在{@link com.android.volley.toolbox.HurlStack}中, 请求发起前被调用
      * Returns a list of extra HTTP headers to go along with this request. Can
      * throw {@link AuthFailureError} as authentication may be required to
      * provide these values.
@@ -443,6 +445,9 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     }
 
     /**
+     * 决定了发给服务器的请求的body, 会在{@link com.android.volley.toolbox.HurlStack#addBodyIfExists(HttpURLConnection, Request)}中被调用
+     * 默认情况下是把{@link #getParams()}返回的表单(Map)数据组装而成, 但是如果是其他数据类型需要重写该方法, 如上传文件,
+     * 同时需要重写{@link #getBodyContentType()}来匹配数据类型
      * Returns the raw POST or PUT body to be sent.
      *
      * <p>By default, the body consists of the request parameters in

@@ -16,10 +16,16 @@
 
 package com.android.volley;
 
+import android.content.Context;
+
+import com.android.volley.toolbox.HttpStack;
+
 import java.util.Collections;
 import java.util.Map;
 
 /**
+ * 缓存策略接口, 在{@link com.android.volley.toolbox.Volley#newRequestQueue(Context, HttpStack)}中创建传入
+ * {@link RequestQueue}中, 默认使用的是{@link com.android.volley.toolbox.DiskBasedCache}
  * An interface for a cache keyed by a String with a byte array as data.
  */
 public interface Cache {
@@ -63,6 +69,8 @@ public interface Cache {
     public void clear();
 
     /**
+     * 返回响应{@link Response#success(Object, Entry)}需要该实例
+     * 默认的实现中, 缓存实例的赋值是在{@link com.android.volley.toolbox.HttpHeaderParser#parseCacheHeaders(NetworkResponse)}
      * Data and metadata for an entry returned by the cache.
      */
     public static class Entry {
@@ -79,23 +87,29 @@ public interface Cache {
         public long lastModified;
 
         /**
-         * 这两个TTL是否不同取决于{@link com.android.volley.toolbox.HttpHeaderParser#parseCacheHeaders(NetworkResponse)},
-         * 响应的头信息是否包含 Cache-Control, 如果不包含则必一样
+         * 如果小于当前时间, 缓存不会被返回, 直接发起请求
          * TTL for this record. */
         public long ttl;
 
-        /** Soft TTL for this record. */
+        /**
+
+         * 如果小于当前时间, 虽然缓存会被返回但是会发起请求更新缓存
+         * Soft TTL for this record. */
         public long softTtl;
 
         /** Immutable response headers as received from server; must be non-null. */
         public Map<String, String> responseHeaders = Collections.emptyMap();
 
-        /** True if the entry is expired. */
+        /**
+         * 缓存过期了, 不应该被使用, 应该重新发起请求
+         * True if the entry is expired. */
         public boolean isExpired() {
             return this.ttl < System.currentTimeMillis();
         }
 
-        /** True if a refresh is needed from the original data source. */
+        /**
+         * 缓存需要刷新, 可以使用缓存, 但是应该发起请求刷新缓存
+         * True if a refresh is needed from the original data source. */
         public boolean refreshNeeded() {
             return this.softTtl < System.currentTimeMillis();
         }
