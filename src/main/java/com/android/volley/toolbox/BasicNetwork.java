@@ -22,6 +22,7 @@ import android.util.Log;
 import com.android.volley.AuthFailureError;
 import com.android.volley.Cache;
 import com.android.volley.Cache.Entry;
+import com.android.volley.CacheDispatcher;
 import com.android.volley.ClientError;
 import com.android.volley.Network;
 import com.android.volley.NetworkDispatcher;
@@ -115,9 +116,12 @@ public class BasicNetwork implements Network {
                  * 则web服务器可能会返回HTTP/304响应,这就表明了客户端中所请求资源的缓存仍然是有效的
                  * 条件验证请求: 客户端提供给服务器一个If-Modified-Since请求头,其值为服务器上次返回的Last-Modified响应头中的日期值,
                  * 还需要提供一个If-None-Match请求头,值为服务器上次返回的ETag响应头的值
+                 * 这些头部信息应该会在{@link #addCacheHeaders(Map, Entry)}中添加入Request的头部信息中
                  * */
                 if (statusCode == HttpStatus.SC_NOT_MODIFIED) {
-                    /** 此时服务器返回的body应该是没有数据的 */
+                    /**
+                     * 此时服务器返回的body应该是没有数据的, 因此直接返回缓存实例
+                     * 这个实例是在{@link CacheDispatcher#run()}中获取到缓存时放入Request的 */
                     Entry entry = request.getCacheEntry();
                     // 正常情况下, 返回304的时候, 缓存不应该为null
                     if (entry == null) {
@@ -162,7 +166,7 @@ public class BasicNetwork implements Network {
                 return new NetworkResponse(statusCode, responseContents, responseHeaders, false,
                         SystemClock.elapsedRealtime() - requestStart);
             } catch (SocketTimeoutException e) {
-                /** 超时时尝试重试, 因为这里是无限循环, 所以会再一次发起请求 */
+                /** 超时时尝试重试, 因为这里是无限循环, 所以会再发起请求, 默认是发起一次 */
                 attemptRetryOnException("socket", request, new TimeoutError());
             } catch (ConnectTimeoutException e) {
                 // 超时时尝试重试
@@ -215,7 +219,10 @@ public class BasicNetwork implements Network {
                         throw new ServerError(networkResponse);
                     }
                 } else {
-                    /** {@link #entityToBytes(HttpEntity)}抛出异常, 重试 */
+                    /**
+                     * {@link #entityToBytes(HttpEntity)}抛出异常, 重试
+                     * 还有作用可以故意抛出异常来重试, 例如301/302重定向, 修改url后抛出异常就可以重新请求
+                     * */
                     attemptRetryOnException("network", request, new NetworkError());
                 }
             }

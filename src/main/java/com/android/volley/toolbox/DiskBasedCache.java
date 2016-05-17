@@ -21,6 +21,8 @@ import android.os.SystemClock;
 
 import com.android.volley.Cache;
 import com.android.volley.CacheDispatcher;
+import com.android.volley.NetworkDispatcher;
+import com.android.volley.Request;
 import com.android.volley.VolleyLog;
 
 import java.io.BufferedInputStream;
@@ -203,14 +205,21 @@ public class DiskBasedCache implements Cache {
     }
 
     /**
+     * 存入缓存, 文件名默认是仅仅根据url来确定的, 可以通过重写{@link Request#getCacheKey()}来修改key
      * Puts the entry with the specified key into the cache.
+     * @param key 默认是来自{@link Request#getCacheKey()}, 默认是url, 主要在{@link NetworkDispatcher#run()}中被调用
+     * @param entry 默认是来自{@link com.android.volley.Response#cacheEntry}
      */
     @Override
     public synchronized void put(String key, Entry entry) {
+        // 如果超出最大值就清理一下缓存
         pruneIfNeeded(entry.data.length);
+        // 根据key获取对应的缓存文件
         File file = getFileForKey(key);
         try {
             BufferedOutputStream fos = new BufferedOutputStream(new FileOutputStream(file));
+            /**
+             * 把Entry转换成CacheHeader, 方便写入文件 */
             CacheHeader e = new CacheHeader(key, entry);
             boolean success = e.writeHeader(fos);
             if (!success) {
@@ -220,6 +229,8 @@ public class DiskBasedCache implements Cache {
             }
             fos.write(entry.data);
             fos.close();
+            /**
+             * 保存缓存实例 */
             putEntry(key, e);
             return;
         } catch (IOException e) {
@@ -231,6 +242,7 @@ public class DiskBasedCache implements Cache {
     }
 
     /**
+     * 删除缓存文件, 移除缓存实例
      * Removes the specified key from the cache if it exists.
      */
     @Override
@@ -244,6 +256,7 @@ public class DiskBasedCache implements Cache {
     }
 
     /**
+     * 文件名是key的前半段的hashCode加上后半段的hashCode
      * Creates a pseudo-unique filename for the specified cache key.
      * @param key The key to generate a file name for.
      * @return A pseudo-unique filename.
@@ -256,6 +269,7 @@ public class DiskBasedCache implements Cache {
     }
 
     /**
+     * 根据key获取文件
      * Returns a file object for the given cache key.
      */
     public File getFileForKey(String key) {
@@ -263,10 +277,12 @@ public class DiskBasedCache implements Cache {
     }
 
     /**
+     * 在写入文件前, 处理缓存空间, 保证缓存空间不超过最大值
      * Prunes the cache to fit the amount of bytes specified.
      * @param neededSpace The amount of bytes we are trying to fit into the cache.
      */
     private void pruneIfNeeded(int neededSpace) {
+        // 没超过不用管
         if ((mTotalSize + neededSpace) < mMaxCacheSizeInBytes) {
             return;
         }
@@ -274,8 +290,11 @@ public class DiskBasedCache implements Cache {
             VolleyLog.v("Pruning old cache entries.");
         }
 
+        // 用来计算释放了多少空间, 做日志
         long before = mTotalSize;
+        // 记录删掉几个文件
         int prunedFiles = 0;
+        // 用来计算释放空间消耗了多少时间
         long startTime = SystemClock.elapsedRealtime();
 
         Iterator<Map.Entry<String, CacheHeader>> iterator = mEntries.entrySet().iterator();
@@ -291,7 +310,7 @@ public class DiskBasedCache implements Cache {
             }
             iterator.remove();
             prunedFiles++;
-
+            /** 避免频繁删除文件, 一次性释放部分缓存空间, 默认是保留0.9倍最大值 */
             if ((mTotalSize + neededSpace) < mMaxCacheSizeInBytes * HYSTERESIS_FACTOR) {
                 break;
             }
@@ -304,6 +323,7 @@ public class DiskBasedCache implements Cache {
     }
 
     /**
+     * 把缓存实例保存到{@link #mEntries}, 并更新下缓存大小
      * Puts the entry with the specified key into the cache.
      * @param key The key to identify the entry by.
      * @param entry The entry to cache.

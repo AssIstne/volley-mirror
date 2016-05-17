@@ -46,7 +46,9 @@ public abstract class Request<T> implements Comparable<Request<T>> {
      * Supported request methods.
      */
     public interface Method {
-        /** 弃用了, 根据{@link Request#getPostBody()}来确定是GET还是POST*/
+        /**
+         * 弃用了, 根据{@link Request#getPostBody()}来确定是GET还是POST
+         * 所以一系列的getPostXxxx也被弃用了 */
         int DEPRECATED_GET_OR_POST = -1;
         int GET = 0;
         int POST = 1;
@@ -83,7 +85,7 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     private RequestQueue mRequestQueue;
 
     /**
-     * 默认是允许缓存的
+     * 默认是允许缓存的, 即使是POST也会缓存, 实际上会浪费缓存空间
      * Whether or not responses to this request should be cached. */
     private boolean mShouldCache = true;
 
@@ -115,6 +117,7 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     private Object mTag;
 
     /**
+     * 弃用了, 因为{@link Method#DEPRECATED_GET_OR_POST}被弃用了
      * Creates a new request with the given URL and error listener.  Note that
      * the normal response listener is not provided here as delivery of responses
      * is provided by subclasses, who have a better idea of how to deliver an
@@ -291,6 +294,7 @@ public abstract class Request<T> implements Comparable<Request<T>> {
 
     /**
      * 相同的cacheKey会被缓存机制{@link Cache}和{@link RequestQueue#mWaitingRequests}看作同一个请求
+     * 默认是直接返回url, 因此不区分GET和POST, 也不区分参数
      * Returns the cache key for this request.  By default, this is the URL.
      */
     public String getCacheKey() {
@@ -326,6 +330,9 @@ public abstract class Request<T> implements Comparable<Request<T>> {
     }
 
     /**
+     * 影响2个节点
+     * 1. 在队列中取出请求的时候判断, 如果已经被取消就不会有请求发生
+     * 2. 在分发响应{@link ExecutorDelivery.ResponseDeliveryRunnable#run()}的时候判断, 虽然请求已经发生并且响应已经返回, 但是如果已经被取消, 就不会回调接口, 即响应不会被感知到
      * Returns true if this request has been canceled.
      */
     public boolean isCanceled() {

@@ -153,7 +153,10 @@ public class CacheDispatcher extends Thread {
                         new NetworkResponse(entry.data, entry.responseHeaders));
                 /** 标记该请求响应解析完毕 */
                 request.addMarker("cache-hit-parsed");
-                /** 判断是不是需要刷新缓存 todo 什么时候需要刷新? */
+                /**
+                 * 判断是不是需要刷新缓存
+                 * {@link com.android.volley.Cache.Entry#softTtl}是由响应的头信息确定的
+                 *  */
                 if (!entry.refreshNeeded()) {
                     // Completely unexpired cache hit. Just deliver the response.
                     /** 利用分发器分发响应, 就是调用回调接口 */
@@ -164,7 +167,9 @@ public class CacheDispatcher extends Thread {
                     // refreshing.
                     /** 标记该请求的缓存需要刷新 */
                     request.addMarker("cache-hit-refresh-needed");
-                    // TODO: 16/5/15 设置缓存的目的?
+                    /**
+                     * 设置缓存实例是为了当服务器返回304(提示客户端应该使用缓存, 响应没有返回数据)时, 可以直接从Request获取到缓存实例,
+                     * 会在{@link com.android.volley.toolbox.BasicNetwork#performRequest(Request)}中用到 */
                     request.setCacheEntry(entry);
 
                     // Mark the response as intermediate.
